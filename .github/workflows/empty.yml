@@ -1,0 +1,61 @@
+name: 🗑️ Clear Folder
+
+on:
+  workflow_dispatch:
+    inputs:
+      folder_name:
+        description: 'نام پوشه‌ای که می‌خواهید خالی شود (مثلاً downloads)'
+        required: true
+        default: 'downloads'
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  clear-folder:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 🗑️ Empty the folder
+        run: |
+          FOLDER="${{ github.event.inputs.folder_name }}"
+          echo "Target folder: $FOLDER"
+          
+          # بررسی اینکه آیا پوشه اصلاً وجود دارد یا خیر
+          if [ -d "$FOLDER" ]; then
+            # پاک کردن تمام محتویات پوشه (حتی فایل‌های مخفی) به جز خود پوشه
+            find "$FOLDER" -mindepth 1 -delete
+            echo "✅ Folder '$FOLDER' emptied."
+          else
+            echo "⚠️ Folder '$FOLDER' did not exist. Creating it."
+            mkdir -p "$FOLDER"
+          fi
+          
+          # ساخت یک فایل خالی برای جلوگیری از حذف شدن خود پوشه توسط گیت
+          touch "$FOLDER"/.gitkeep
+
+      - name: 💾 Commit and Push Deletions
+        run: |
+          # تنظیمات ربات گیت‌هاب
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # اضافه کردن تمام تغییرات (از جمله فایل‌های حذف شده)
+          git add -A
+          
+          # بررسی اینکه آیا واقعاً چیزی پاک شده است یا از قبل خالی بوده
+          if git diff --staged --quiet; then
+            echo "🤷‍♂️ Folder was already empty. Nothing to commit."
+          else
+            git commit -m "🗑️ Clear contents of folder: ${{ github.event.inputs.folder_name }}"
+            
+            # جلوگیری از تداخل
+            git pull --rebase origin main
+            
+            # پوش کردن تغییرات
+            git push origin main
+            echo "🎉 Folder successfully cleared and pushed!"
+          fi
