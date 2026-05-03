@@ -1,0 +1,78 @@
+name: Safe File Downloader
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: 'لینک فایل برای دانلود'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  download-and-save:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 🚀 Download and Process File
+        run: |
+          # خواندن لینک از ورودی کاربر
+          URL="${{ github.event.inputs.url }}"
+          
+          # ساخت پوشه دانلودها و پوشه موقت
+          mkdir -p downloads tmp_download
+          cd tmp_download
+
+          echo "Downloading: $URL"
+          
+          # دانلود فایل با wget (پشتیبانی از نام اصلی فایل در لینک‌های پیچیده)
+          wget --content-disposition "$URL"
+
+          # پیدا کردن نام فایل دانلود شده
+          FILENAME=$(ls -1 | head -n 1)
+          echo "✅ Download completed: $FILENAME"
+
+          # محاسبه حجم فایل به بایت
+          FILESIZE=$(stat -c%s "$FILENAME")
+          FILESIZE_MB=$(( FILESIZE / 1024 / 1024 ))
+          echo "📦 File size: $FILESIZE_MB MB"
+
+          # محدودیت امن گیت‌هاب (50 مگابایت = 52428800 بایت)
+          LIMIT=52428800
+
+          if [ "$FILESIZE" -gt "$LIMIT" ]; then
+            echo "⚠️ File is larger than 50MB. Splitting into 50MB chunks to bypass GitHub limits..."
+            # تکه‌تکه کردن فایل به پارت‌های 50 مگابایتی
+            split -b 50M "$FILENAME" "../downloads/${FILENAME}.part_"
+            echo "✂️ File split successfully into parts."
+          else
+            echo "✅ File is safe size. Moving directly to downloads folder."
+            mv "$FILENAME" "../downloads/"
+          fi
+
+      - name: 💾 Commit and Push to GitHub
+        run: |
+          # تنظیمات ربات گیت‌هاب برای کامیت
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # اضافه کردن فایل‌های پوشه downloads
+          git add downloads/
+          
+          # بررسی اینکه آیا فایل جدیدی اضافه شده یا نه
+          if git diff --staged --quiet; then
+            echo "🤷‍♂️ No new files to commit."
+          else
+            git commit -m "📥 Add downloaded file: ${{ github.event.inputs.url }}"
+            
+            # جلوگیری از خطای تداخل (Conflict) در صورت تغییر همزمان ریپازیتوری
+            git pull --rebase origin main 
+            
+            # پوش کردن اطلاعات
+            git push origin main
+            echo "🎉 Successfully pushed to repository!"
+          fi
