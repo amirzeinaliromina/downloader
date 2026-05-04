@@ -36,7 +36,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ffmpeg
           python -m pip install --upgrade pip
-          # نصب آخرین نسخه توسعه‌دهنده yt-dlp برای عبور از تحریم‌های یوتوب
           pip install -U https://github.com/yt-dlp/yt-dlp/archive/master.tar.gz
 
       - name: Create Downloads Directory
@@ -46,7 +45,7 @@ jobs:
         env:
           YOUTUBE_COOKIES: ${{ secrets.YOUTUBE_COOKIES }}
         run: |
-          if [ ! -z "$YOUTUBE_COOKIES" ]; then
+          if[ ! -z "$YOUTUBE_COOKIES" ]; then
             echo "$YOUTUBE_COOKIES" > cookies.txt
             echo "✅ فایل کوکی با موفقیت ایجاد شد."
           else
@@ -58,28 +57,31 @@ jobs:
           URL="${{ github.event.inputs.url }}"
           QUALITY="${{ github.event.inputs.quality }}"
           
-          # تنظیمات ضد ربات (استفاده از کلاینت اندروید/تلویزیون به جای وب)
+          # تنظیمات پایه و ضد ربات
           EXTRA_ARGS="--extractor-args youtube:player_client=android,tv,web --rm-cache-dir"
           
-          # اگر کوکی وجود داشت به دستور اضافه کن
-          if [ -f "cookies.txt" ]; then
+          if[ -f "cookies.txt" ]; then
             EXTRA_ARGS="$EXTRA_ARGS --cookies cookies.txt"
           fi
           
+          # انتخاب کیفیت با روش ایمن (جلوگیری از خطای در دسترس نبودن فرمت)
           if [[ "$QUALITY" == *"Best"* ]]; then
-            FORMAT="bestvideo+bestaudio/best"
+            FORMAT="bv*+ba/b"
           elif [[ "$QUALITY" == *"1080p"* ]]; then
-            FORMAT="bestvideo[height<=1080]+bestaudio/best[height<=1080]"
+            FORMAT="bv*+ba/b"
+            EXTRA_ARGS="$EXTRA_ARGS -S res:1080"
           elif [[ "$QUALITY" == *"720p"* ]]; then
-            FORMAT="bestvideo[height<=720]+bestaudio/best[height<=720]"
+            FORMAT="bv*+ba/b"
+            EXTRA_ARGS="$EXTRA_ARGS -S res:720"
           elif [[ "$QUALITY" == *"480p"* ]]; then
-            FORMAT="bestvideo[height<=480]+bestaudio/best[height<=480]"
+            FORMAT="bv*+ba/b"
+            EXTRA_ARGS="$EXTRA_ARGS -S res:480"
           elif [[ "$QUALITY" == *"Audio Only"* ]]; then
-            FORMAT="bestaudio/best"
+            FORMAT="ba/b"
             EXTRA_ARGS="$EXTRA_ARGS -x --audio-format mp3"
           fi
 
-          echo "Downloading $URL..."
+          echo "Downloading $URL with format rules..."
           yt-dlp -f "$FORMAT" $EXTRA_ARGS -o "downloads/%(title)s.%(ext)s" "$URL"
 
       - name: Upload Downloaded Video as Artifact
