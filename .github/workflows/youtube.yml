@@ -31,25 +31,41 @@ jobs:
         with:
           python-version: '3.x'
 
-      - name: Install Dependencies (FFmpeg & yt-dlp)
+      - name: Install Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg
           python -m pip install --upgrade pip
-          pip install yt-dlp
+          # نصب آخرین نسخه توسعه‌دهنده yt-dlp برای عبور از تحریم‌های یوتوب
+          pip install -U https://github.com/yt-dlp/yt-dlp/archive/master.tar.gz
 
       - name: Create Downloads Directory
         run: mkdir -p downloads
+
+      - name: Setup Cookies (If Available)
+        env:
+          YOUTUBE_COOKIES: ${{ secrets.YOUTUBE_COOKIES }}
+        run: |
+          if [ ! -z "$YOUTUBE_COOKIES" ]; then
+            echo "$YOUTUBE_COOKIES" > cookies.txt
+            echo "✅ فایل کوکی با موفقیت ایجاد شد."
+          else
+            echo "⚠️ کوکی یافت نشد. تلاش برای دور زدن ربات بدون کوکی..."
+          fi
 
       - name: Download YouTube Video
         run: |
           URL="${{ github.event.inputs.url }}"
           QUALITY="${{ github.event.inputs.quality }}"
           
-          # تنظیمات پیش‌فرض
-          EXTRA_ARGS=""
+          # تنظیمات ضد ربات (استفاده از کلاینت اندروید/تلویزیون به جای وب)
+          EXTRA_ARGS="--extractor-args youtube:player_client=android,tv,web --rm-cache-dir"
           
-          # تعیین کیفیت بر اساس انتخاب کاربر
+          # اگر کوکی وجود داشت به دستور اضافه کن
+          if [ -f "cookies.txt" ]; then
+            EXTRA_ARGS="$EXTRA_ARGS --cookies cookies.txt"
+          fi
+          
           if [[ "$QUALITY" == *"Best"* ]]; then
             FORMAT="bestvideo+bestaudio/best"
           elif [[ "$QUALITY" == *"1080p"* ]]; then
@@ -60,12 +76,10 @@ jobs:
             FORMAT="bestvideo[height<=480]+bestaudio/best[height<=480]"
           elif [[ "$QUALITY" == *"Audio Only"* ]]; then
             FORMAT="bestaudio/best"
-            EXTRA_ARGS="-x --audio-format mp3"
+            EXTRA_ARGS="$EXTRA_ARGS -x --audio-format mp3"
           fi
 
-          echo "Downloading $URL with format $FORMAT..."
-          
-          # دستور دانلود با yt-dlp
+          echo "Downloading $URL..."
           yt-dlp -f "$FORMAT" $EXTRA_ARGS -o "downloads/%(title)s.%(ext)s" "$URL"
 
       - name: Upload Downloaded Video as Artifact
@@ -73,4 +87,4 @@ jobs:
         with:
           name: Downloaded-Media
           path: downloads/
-          retention-days: 5 # فایل به مدت 5 روز در گیت‌هاب می‌ماند و سپس پاک می‌شود
+          retention-days: 5
